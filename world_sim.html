@@ -1,0 +1,154 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Geo Sim</title>
+<style>:root{--bg:#0a0e14;--p:rgba(22,30,41,.85);--l:#2a3a4d;--t:#eef3f8;--m:#8b9bb0;--a:#4aa3df;--a2:#7c5cff}*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#16263a,transparent),radial-gradient(900px 500px at 100% 0,#1c1840,transparent),var(--bg);color:var(--t);font:13px/1.4 Inter,system-ui,Arial;min-height:100vh}
+button,input,select{font:inherit;background:#18222f;color:var(--t);border:1px solid var(--l);border-radius:10px;padding:7px 11px;cursor:pointer;transition:.15s}
+button:hover,select:hover{border-color:var(--a);transform:translateY(-1px)}button.on{background:linear-gradient(135deg,var(--a),var(--a2));border-color:transparent;box-shadow:0 0 14px #4aa3df66;font-weight:600}
+.bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:9px 14px;background:var(--p);backdrop-filter:blur(10px);border-bottom:1px solid var(--l)}
+.bar b{font-size:17px;letter-spacing:.5px;background:linear-gradient(90deg,#7fd0ff,#b9a6ff);-webkit-background-clip:text;color:transparent;margin-right:8px}
+#yr,#wp,#wg,#ww,#nc{background:#0d141d;border:1px solid var(--l);border-radius:20px;padding:4px 12px;font-weight:600;font-variant-numeric:tabular-nums}#yr{color:#ffd166;border-color:#ffd16655}#ww{color:#ff6b6b}
+.main{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:12px;padding:12px}@media(max-width:900px){.main{grid-template-columns:1fr}}
+canvas{width:100%;display:block;border-radius:14px;border:1px solid var(--l);background:#0b4f7a;box-shadow:0 10px 40px #0008}
+.side{background:var(--p);backdrop-filter:blur(10px);border:1px solid var(--l);border-radius:14px;padding:12px;max-height:80vh;overflow:auto;box-shadow:0 10px 40px #0006}
+.side::-webkit-scrollbar{width:6px}.side::-webkit-scrollbar-thumb{background:var(--l);border-radius:3px}
+.r{display:flex;justify-content:space-between;padding:5px 2px;border-bottom:1px solid #1e2a38}.m{color:var(--m)}a{text-decoration:none;font-weight:600}
+h2{font-size:20px}h3{margin:12px 0 5px;font-size:11px;color:var(--a);text-transform:uppercase;letter-spacing:1.2px}
+#tip{position:fixed;pointer-events:none;background:#05080dee;border:1px solid var(--l);padding:5px 10px;border-radius:8px;display:none;font-size:12px;z-index:9}.lg div{padding:4px 0;border-bottom:1px solid #1b2733}
+label{display:flex;gap:6px;align-items:center;color:var(--m)}input[type=range]{width:78px;padding:0;accent-color:var(--a)}
+#spd,#modes{margin-top:10px;border:1px solid var(--l);border-radius:14px;justify-content:center}#spd button{min-width:46px;font-weight:600}#go{background:linear-gradient(135deg,#2fbf71,#1a9d9d);border:0;font-weight:700}</style></head><body>
+<div class="bar"><b>🌍 Geo Sim</b><span id="yr"></span><span id="wp"></span><span id="wg"></span><span id="ww"></span><span id="nc"></span></div>
+<div class="bar" id="setup"><select id="pre"><option value="0">Monde réaliste</option><option value="1">Monde chaotique</option><option value="2">Guerre mondiale</option><option value="3">Monde pacifique</option><option value="4">Monde médiéval</option><option value="5">Monde futuriste</option></select>
+<label>Pays<input id="n" type="number" value="14" min="2" max="200" style="width:60px"></label><label>Carte<select id="size"><option value="100">S</option><option value="140" selected>M</option><option value="200">L</option></select></label>
+<label>Continents<input id="cont" type="range" min="1" max="6" value="3"></label><label>Chaos<input id="chaos" type="range" min="0" max="2" step=".1" value="1"></label><label>Guerres<input id="war" type="range" min="0" max="2" step=".1" value="1"></label><label>Événements<input id="ev" type="range" min="0" max="2" step=".1" value="1"></label><label>Tech<input id="tech" type="range" min="0" max="7" step=".5" value="2"></label><button id="go">▶ Générer</button></div>
+<div class="main"><div><canvas id="map"></canvas><div class="bar" id="spd" ></div><div class="bar" id="modes" ></div></div>
+<div class="side"><div class="bar" id="tabs" style="padding:0 0 6px;background:none;border:0"></div><div id="pn"></div><canvas id="ch" width="300" height="90" style="margin-top:8px"></canvas></div></div><div id="tip"></div>
+<script>
+'use strict';
+const $=i=>document.getElementById(i),M=300,SC=6;
+const PERS={expansionniste:[.9,.5],agressif:[1,.3],opportuniste:[.6,.5],commerçant:[.2,.8],diplomatique:[.15,1],pacifiste:[0,.9],isolationniste:[.05,.2]};
+const GOV=['démocratie','monarchie','république','junte','théocratie','fédération'],RES=['pétrole','gaz','charbon','fer','uranium'];
+const PRE=[[14,1,1,1,2,2000],[30,2,1.5,1.8,2,2000],[20,1,2,1,3.5,1940],[14,.5,.2,1,2,2000],[16,1.2,1,1.5,0,1100],[16,1,1,1.3,6,2150]];
+const mulb=a=>()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+let R=Math.random,S=null,speed=1,mode='pol',tab='pays',acc=0,last=0,dirty=1,SYL='ka lo mir an tor vel dra sen ur ix bel zan qui mo ra the lun os ev dar fen'.split(' ');
+const nm=()=>{let s='';for(let i=0,k=2+(R()*2|0);i<k;i++)s+=SYL[R()*SYL.length|0];return s[0].toUpperCase()+s.slice(1)};
+const cl=(v,a,b)=>v<a?a:v>b?b:v,pick=a=>a[R()*a.length|0];
+const gr=(a,b)=>S.rel[a.id*M+b.id],sr=(a,b,v)=>{v=cl(v,-100,100);S.rel[a.id*M+b.id]=S.rel[b.id*M+a.id]=v};
+const pw=c=>c.army*(1+c.tech*.18)*(.4+c.mor/166)*(.7+.3*Math.min(1,c.food));
+const yearOf=()=>Math.floor(S.y0+S.day/365),log=(t,ids=[])=>{S.log.unshift({d:S.day,t,ids});if(S.log.length>400)S.log.pop()};
+const dstr=d=>Math.floor(S.y0+d/365);
+const fmt=v=>v>=1e6?(v/1e6).toFixed(1)+'G':v>=1e3?(v/1e3).toFixed(1)+'M':Math.round(v)+'k';
+function gen(){
+ const q=k=>+$(k).value,p={n:q('n'),W:q('size'),cont:q('cont'),chaos:q('chaos'),war:q('war'),ev:q('ev'),tech:q('tech')};
+ R=mulb(Date.now()^(Math.random()*1e9|0));const W=p.W,H=Math.round(W*.58),N=W*H,sd=R()*9999|0;
+ const lat=(x,y)=>{let h=Math.imul(x*374761393+y*668265263+sd,1274126177);h=Math.imul(h^h>>>13,1103515245);return((h^h>>>16)>>>0)/4294967296};
+ const vn=(x,y)=>{const ix=Math.floor(x),iy=Math.floor(y),fx=x-ix,fy=y-iy,u=fx*fx*(3-2*fx),v=fy*fy*(3-2*fy);return lat(ix,iy)*(1-u)*(1-v)+lat(ix+1,iy)*u*(1-v)+lat(ix,iy+1)*(1-u)*v+lat(ix+1,iy+1)*u*v};
+ const hs=new Float32Array(N);for(let y=0;y<H;y++)for(let x=0;x<W;x++){const nx=x/W,ny=y/H,f=p.cont*.9;let h=0;for(let o=0;o<4;o++)h+=vn(nx*f*(1<<o),ny*f*(1<<o)*.6)/(1<<o);
+  h/=1.875;h-=(1-Math.min(1,Math.min(nx,1-nx,ny*1.2,1-ny*1.2)*5))*.45;hs[y*W+x]=h}
+ const thr=Float32Array.from(hs).sort()[Math.floor(N*.62)],land=new Uint8Array(N),own=new Int16Array(N).fill(-1),res=new Int8Array(N).fill(-1);
+ const ls=[];for(let i=0;i<N;i++)if(hs[i]>=thr){land[i]=1;ls.push(i);if(R()<.1)res[i]=R()*5|0}
+ S={p,W,H,N,land,own,res,hs,day:0,y0:PRE[$('pre').value][5],cs:[],wars:[],log:[],rel:new Float32Array(M*M),sel:-1,wins:{}};
+ const nb=i=>{const x=i%W,r=[];if(x>0)r.push(i-1);if(x<W-1)r.push(i+1);if(i>=W)r.push(i-W);if(i<N-W)r.push(i+W);return r};S.nb=nb;
+ const n=Math.min(p.n,M-40),fr=[],md=Math.sqrt(ls.length/n)*.55;
+ for(let i=0,t=0;i<n&&t<5000;t++){const c=pick(ls);if(S.cs.every(o=>Math.hypot(o.cap%W-c%W,(o.cap/W|0)-(c/W|0))>md||t>3000)){mk(c);own[c]=i;fr.push(c);i++}}
+ while(fr.length){const k=R()*fr.length|0,o=own[fr[k]],ns=nb(fr[k]).filter(j=>land[j]&&own[j]<0);if(!ns.length){fr[k]=fr[fr.length-1];fr.pop();continue}const j=pick(ns);own[j]=o;fr.push(j)}
+ recount();S.cs.forEach(c=>{if(!c.cells){c.alive=0;return}c.pop=c.cells*(300+R()*500);c.gdp=c.pop*.8;c.army=c.pop*.01;c.tre=c.gdp*.2;c.hp=[]});
+ log('Le monde est créé : '+S.cs.filter(c=>c.alive).length+' pays.');dirty=1;sel(-1);
+}
+function mk(cap){const id=S.cs.length,pn=Object.keys(PERS),c={id,name:nm(),col:`hsl(${(id*137.5)%360},${50+R()*25|0}%,${42+R()*16|0}%)`,pers:pick(pn),gov:pick(GOV),leader:nm()+' '+nm(),cap,alive:1,pop:0,gdp:0,army:0,tech:Math.max(0,S.p.tech+R()-.5),stab:55+R()*20,mor:60,food:1,tre:0,cells:0,res:[0,0,0,0,0],adj:{},al:new Set(),at:new Set(),truce:{},sanc:0,hp:[],wins:0,bloc:id,alert:0,gp:0,tb:[R(),R(),R()],fl:[R()*360|0,R()*360|0,R()*3|0],cx:0,cy:0,city:[]};
+ if(S.cs.length)for(const o of S.cs)sr(c,o,(R()-.5)*40);S.cs.push(c);return c}
+function recount(){const{W,N,own,cs,res}=S;let sx={},sy={};for(const c of cs){c.cells=0;c.res=[0,0,0,0,0];c.adj={};sx[c.id]=0;sy[c.id]=0;c.any=-1}
+ for(let i=0;i<N;i++){const o=own[i];if(o<0)continue;const c=cs[o];c.cells++;c.any=i;sx[o]+=i%W;sy[o]+=i/W|0;if(res[i]>=0)c.res[res[i]]++;
+  const x=i%W;if(x<W-1){const b=own[i+1];if(b>=0&&b!==o){c.adj[b]=1;cs[b].adj[o]=1}}if(i<N-W){const b=own[i+W];if(b>=0&&b!==o){c.adj[b]=1;cs[b].adj[o]=1}}}
+ for(const c of cs){if(!c.alive)continue;if(!c.cells){die(c,null);continue}c.cx=sx[c.id]/c.cells;c.cy=sy[c.id]/c.cells;if(own[c.cap]!==c.id)c.cap=c.any}}
+function die(c,by){if(!c.alive)return;c.alive=0;S.wars.filter(w=>w.a===c.id||w.d===c.id).forEach(w=>endWar(w,''));for(const o of S.cs){o.al.delete(c.id);o.at.delete(c.id)}c.al.clear();log(`${c.name} disparaît de la carte${by?' (annexé par '+by.name+')':''}.`,[c.id]);if(S.sel===c.id)sel(-1)}
+function declare(a,d,join){if(a.at.has(d.id))return;const w={a:a.id,d:d.id,start:S.day,gain:0,contact:0};S.wars.push(w);a.at.add(d.id);d.at.add(a.id);sr(a,d,gr(a,d)-40);
+ if(join)return log(`${a.name} entre en guerre contre ${d.name} (alliance).`,[a.id,d.id]);
+ log(`⚔ ${a.name} déclare la guerre à ${d.name}.`,[a.id,d.id]);
+ for(const x of [...d.al].map(k=>S.cs[k]))if(x.alive&&x!==a&&!x.al.has(a.id)){if(R()<.5+PERS[x.pers][1]*.25)declare(x,a,1);else{sr(x,d,gr(x,d)-20);if(R()<.4){x.al.delete(d.id);d.al.delete(x.id);log(`Trahison : ${x.name} abandonne son allié ${d.name}.`,[x.id,d.id])}}}
+ for(const x of [...a.al].map(k=>S.cs[k]))if(x.alive&&x!==d&&R()<.5)declare(x,d,1);
+ for(const x of S.cs)if(x.alive&&x!==a&&x!==d&&!a.al.has(x.id)&&gr(x,a)<5&&PERS[x.pers][1]>.7&&R()<.5&&S.day>a.sanc){a.sanc=S.day+365;log(`Sanctions contre ${a.name}.`,[a.id]);break}}
+function endWar(w,why){const i=S.wars.indexOf(w);if(i<0)return;S.wars.splice(i,1);const a=S.cs[w.a],d=S.cs[w.d];a.at.delete(d.id);d.at.delete(a.id);a.truce[d.id]=d.truce[a.id]=S.day+730;if(!a.alive||!d.alive)return;
+ sr(a,d,gr(a,d)+25);if(w.gain>0){a.wins++;d.stab-=Math.min(15,w.gain/3)}log(`🕊 Paix entre ${a.name} et ${d.name} (${why||'cessez-le-feu'}).`,[a.id,d.id])}
+function fight(w){const{W,N,own}=S,a=S.cs[w.a],d=S.cs[w.d];if(!a.alive||!d.alive)return endWar(w,'');const cand=[];
+ for(let i=0;i<N;i++){if(own[i]!==d.id)continue;const x=i%W;if(x>0&&own[i-1]===a.id||x<W-1&&own[i+1]===a.id||i>=W&&own[i-W]===a.id||i<N-W&&own[i+W]===a.id)cand.push(i)}
+ w.contact=cand.length?0:w.contact+4;if(w.contact>120)return endWar(w,'sans combat');
+ const pa=pw(a)*(.7+R()*.6),pd=pw(d)*1.15*(.7+R()*.6),r=pa/pd,t=pa+pd,la=.012*(pd/t)*(.5+R()),ld=.012*(pa/t)*(.5+R());
+ a.pop-=a.army*la*.4;d.pop-=d.army*ld*.4;a.army*=1-la;d.army*=1-ld;a.mor=cl(a.mor+(r>1?.3:-.4),0,100);d.mor=cl(d.mor+(r>1?-.5:.3),0,100);
+ if(r>1&&cand.length&&R()<.18){const n=Math.min(cand.length,Math.ceil((r-1)*1.2*R()+(R()<.25?1:0)));for(let k=0;k<n;k++){const j=cand.splice(R()*cand.length|0,1)[0];own[j]=a.id;a.cells++;d.cells--;w.gain++;if(j===d.cap){d.stab-=20;d.cap=cand.length?cand[0]:j;log(`La capitale de ${d.name} est prise par ${a.name} !`,[a.id,d.id])}}
+  dirty=1;if(n>2&&R()<.15)log(`Bataille près de ${nm()} : ${a.name} l'emporte sur ${d.name}.`,[a.id,d.id]);if(d.cells<=0)return die(d,a)}}
+function monthly(){recount();const al=S.cs.filter(c=>c.alive),P=S.p;
+ for(const w of S.wars.slice()){const a=S.cs[w.a],d=S.cs[w.d],age=(S.day-w.start)/30,pp=.03+age/400+(Math.min(a.mor,d.mor)<30?.2:0)+(PERS[a.pers][1]+PERS[d.pers][1])*.03;if(R()<pp)endWar(w,w.gain>3?'victoire de '+a.name:'paix blanche')}
+ for(const c of al){if(!c.alive)continue;const pr=PERS[c.pers],nw=c.at.size;
+  // économie
+  const rs=c.res.reduce((x,y)=>x+y,0),tr=Math.min(.08,(c.al.size+Object.keys(c.adj).filter(k=>gr(c,S.cs[k])>30).length)*.01*(1+pr[1])),
+   prod=c.pop*(.5+.1*c.tech)*(.5+.5*c.stab/100)*(1+.03*Math.min(10,rs))*(1+tr)*(1-.1*Math.min(3,nw))*(S.day<c.sanc?.88:1);
+  const og=c.gdp;c.gdp+=(prod-c.gdp)*.15;const sup=c.cells*650*(1+.12*c.tech);c.food=sup/Math.max(1,c.pop);c.pop*=1+.001*Math.min(1.3,c.food)-(c.food<1?(1-c.food)*.015:0)-(c.alert>1.5?0:0);
+  const tgt=c.pop*(.008+.01*pr[0])*(1+.5*nw)*(1+.3*Math.min(2,c.alert));c.army+=(tgt-c.army)*.1;c.tre+=c.gdp*.03-c.army*.012-nw*c.army*.01;if(c.tre<-c.gdp)c.tre=-c.gdp;
+  c.tech=Math.min(10,c.tech+.003*(.5+c.gdp/Math.max(1,c.pop))*(c.stab>30?1:.3));
+  // politique
+  const base=55+(c.gov==='démocratie'?5:0),gg=cl((c.gdp/(og||1)-1)*30,-2,2);c.stab=cl(c.stab+(base-c.stab)*.04-nw*1.2-(c.food<1?(1-c.food)*8:0)-(c.tre<0?1:0)+gg,0,100);c.mor=cl(c.mor+(60-c.mor)*.05-nw*.3,0,100);
+  if((c.gov==='démocratie'||c.gov==='république')&&((S.day/30|0)+c.id)%48===0){c.leader=nm()+' '+nm();c.stab=cl(c.stab+R()*6-3,0,100)}
+  if(c.stab<28&&R()<(28-c.stab)/400*P.chaos)revol(c);else if(c.stab<12&&c.cells>20&&R()<.02*P.chaos&&S.cs.length<M-2)split(c);
+  // événements
+  if(R()<P.ev*.012){const e=R()*7|0;if(e===0){c.pop*=.97;c.stab-=4;log(`Épidémie en ${c.name}.`,[c.id])}else if(e===1){c.gdp*=1.1;c.stab+=3;log(`Boom économique en ${c.name}.`,[c.id])}else if(e===2){c.gdp*=.88;c.stab-=5;log(`Crise économique en ${c.name}.`,[c.id])}else if(e===3){c.tech=Math.min(10,c.tech+.4);log(`Découverte technologique en ${c.name}.`,[c.id])}else if(e===4){c.pop*=.985;c.gdp*=.95;log(`Catastrophe naturelle en ${c.name}.`,[c.id])}else if(e===5){const k=pick(S.cs.filter(x=>x.alive));if(k&&k!==c&&c.adj[k.id]){const m=c.pop*.01;c.pop-=m;k.pop+=m;log(`Migration de ${c.name} vers ${k.name}.`,[c.id,k.id])}}else{c.stab-=8;sr(c,pick(al),-30);log(`Assassinat politique en ${c.name}.`,[c.id])}}
+  // IA diplomatique
+  ai(c)}
+ // blocs
+ const par=al.map(c=>c.id),f=i=>{while(par[i]!==i&&par[i]!==undefined)i=par[i];return i};const U={};al.forEach(c=>U[c.id]=c.id);const fu=i=>U[i]===i?i:U[i]=fu(U[i]);
+ al.forEach(c=>c.al.forEach(k=>{if(U[k]!==undefined)U[fu(c.id)]=fu(k)}));al.forEach(c=>c.bloc=fu(c.id));
+ if(S.day%30===0){al.forEach(c=>{c.gp=pw(c);c.hp.push(c.gp);if(c.hp.length>240)c.hp.shift()})}dirty=1}
+function revol(c){c.gov=pick(GOV);c.leader=nm()+' '+nm();c.stab=45+R()*15;for(const o of S.cs)if(o.alive&&o!==c)sr(c,o,gr(c,o)*.4);S.wars.filter(w=>w.a===c.id||w.d===c.id).forEach(w=>{if(R()<.5)endWar(w,'révolution')});log(`✊ Révolution en ${c.name} : régime ${c.gov}, dirigeant ${c.leader}.`,[c.id])}
+function split(c){const{own}=S,n=Math.floor(c.cells*.4),s=c.any,q=[s],seen=new Set([s]),ids=[];while(q.length&&ids.length<n){const i=q.shift();if(own[i]!==c.id)continue;ids.push(i);for(const j of S.nb(i))if(!seen.has(j)&&own[j]===c.id){seen.add(j);q.push(j)}}
+ const k=mk(s),f=ids.length/c.cells;ids.forEach(i=>own[i]=k.id);k.pop=c.pop*f;c.pop-=k.pop;k.gdp=c.gdp*f;c.gdp-=k.gdp;k.army=c.army*f*.5;k.tech=c.tech;k.tre=0;k.stab=45;c.stab=40;
+ for(const o of S.cs)if(o!==k&&o!==c)sr(k,o,gr(c,o)*.5+(R()-.5)*20);sr(k,c,-60);log(`🔥 Guerre civile : ${k.name} se sépare de ${c.name}.`,[c.id,k.id]);recount()}
+function ai(c){const P=PERS[c.pers],nbs=Object.keys(c.adj).map(k=>S.cs[k]).filter(n=>n.alive),my=pw(c);let al=0;
+ for(const n of nbs){const r=gr(c,n),pn=pw(n),t=pn/(my+1);al=Math.max(al,c.al.has(n.id)?0:t);
+  let dr=(R()-.5)*4-(c.gov!==n.gov?.4:0)+(c.at.has(n.id)?-3:0)+(c.al.has(n.id)?1.5:0)+(P[1]-.4)*1.2-P[0]*.8-(t>1.7&&!c.al.has(n.id)?1.2:0);for(const e of c.at)if(n.at.has(e))dr+=2;sr(c,n,r+dr*.5);
+  const r2=gr(c,n);
+  if(!c.al.has(n.id)){if(r2>45&&c.al.size<5&&n.al.size<5&&R()<.12*(P[1]+.3)){c.al.add(n.id);n.al.add(c.id);log(`🤝 Alliance entre ${c.name} et ${n.name}.`,[c.id,n.id])}}
+  else{if(r2<10){c.al.delete(n.id);n.al.delete(c.id);log(`Alliance rompue : ${c.name} / ${n.name}.`,[c.id,n.id])}else if(P[0]>.5&&my>pn*1.8&&R()<.02){c.al.delete(n.id);n.al.delete(c.id);sr(c,n,-60);log(`🗡 Trahison : ${c.name} trahit ${n.name}.`,[c.id,n.id])}}
+  if(t>1.7&&!c.at.size){for(const m of nbs)if(m!==n&&gr(c,m)>15&&!c.al.has(m.id)&&gr(m,n)<30&&R()<.15){c.al.add(m.id);m.al.add(c.id);log(`Coalition ${c.name}–${m.name} contre ${n.name}.`,[c.id,m.id,n.id]);break}}
+  if(!c.at.has(n.id)&&!c.al.has(n.id)&&S.day>(c.truce[n.id]||0)&&c.at.size<2){let sc=P[0]*45-18+(my/(pn+1)-1)*22-r2*.45+(n.stab<35?14:0)+(c.food<.9?10:0)-c.at.size*30-[...n.al].reduce((s,x)=>s+pw(S.cs[x])/(my+1)*10,0)-(c.stab<30?25:0)-(c.tre<0?10:0);
+   if(sc>40&&R()<S.p.war*.1)declare(c,n)}}
+ c.alert=al}
+// ---- rendu
+function colorOf(c,m,mx){if(m==='pol')return c.col;if(m==='mil')return c.at.size?'#d33':`hsl(0,10%,${25+60*Math.sqrt(c.gp/mx.gp)}%)`;
+ const sc=(v,m2,h)=>`hsl(${h},70%,${85-60*Math.sqrt(v/(m2||1))}%)`;if(m==='eco')return sc(c.gdp,mx.gdp,130);if(m==='pop')return sc(c.pop,mx.pop,210);if(m==='res')return sc(c.res.reduce((a,b)=>a+b,0),mx.res,280);
+ if(m==='blo')return S.cs[c.bloc].col;if(m==='dip'&&S.sel>=0){if(c.id===S.sel)return'#fff';const r=gr(c,S.cs[S.sel]);return`hsl(${60+r*.6},70%,45%)`}return c.col}
+const cv=$('map'),ctx=cv.getContext('2d');
+function draw(){const{W,H,own,cs,land}=S;cv.width=W*SC;cv.height=H*SC;ctx.fillStyle='#0b4f7a';ctx.fillRect(0,0,cv.width,cv.height);const al=cs.filter(c=>c.alive),
+ mx={gp:Math.max(1,...al.map(c=>c.gp||pw(c))),gdp:Math.max(1,...al.map(c=>c.gdp)),pop:Math.max(1,...al.map(c=>c.pop)),res:Math.max(1,...al.map(c=>c.res.reduce((a,b)=>a+b,0)))},cols={};
+ for(const c of al)cols[c.id]=colorOf(c,mode,mx);
+ for(let i=0;i<S.N;i++){if(!land[i])continue;ctx.fillStyle=own[i]<0?'#555':cols[own[i]];ctx.fillRect((i%W)*SC,(i/W|0)*SC,SC,SC)}
+ ctx.fillStyle='#000a';for(let i=0;i<S.N;i++){const o=own[i];if(o<0)continue;const x=i%W,y=i/W|0;if(x<W-1&&own[i+1]!==o&&own[i+1]>=0)ctx.fillRect(x*SC+SC-1,y*SC,1.5,SC);if(i<S.N-W&&own[i+W]!==o&&own[i+W]>=0)ctx.fillRect(x*SC,y*SC+SC-1,SC,1.5)}
+ ctx.font='bold 10px system-ui';ctx.textAlign='center';for(const c of al){const x=(c.cap%W+.5)*SC,y=(c.cap/W|0)*SC;ctx.fillStyle=c.id===S.sel?'#ff0':'#fff';ctx.strokeStyle='#000';ctx.strokeRect(x-2,y+1,4,4);ctx.fillRect(x-2,y+1,4,4);
+  if(c.cells>18){ctx.lineWidth=3;ctx.strokeStyle='#000b';ctx.strokeText(c.name,c.cx*SC,c.cy*SC);ctx.lineWidth=1;ctx.fillStyle='#fff';ctx.fillText(c.name,c.cx*SC,c.cy*SC)}}dirty=0}
+// ---- UI
+const flag=c=>{const k=document.createElement('canvas');k.width=48;k.height=32;const g=k.getContext('2d'),[a,b,t]=c.fl;g.fillStyle=`hsl(${a},60%,45%)`;g.fillRect(0,0,48,32);g.fillStyle=`hsl(${b},60%,55%)`;if(t===0)g.fillRect(0,11,48,10);else if(t===1)g.fillRect(16,0,16,32);else{g.beginPath();g.arc(24,16,9,0,7);g.fill()}return k.toDataURL()};
+const rk={pow:['Puissance',c=>c.gp],pop:['Population',c=>c.pop],gdp:['PIB',c=>c.gdp],army:['Armée',c=>c.army],cells:['Territoire',c=>c.cells],tech:['Technologie',c=>c.tech],al:['Alliés',c=>c.al.size],wins:['Victoires',c=>c.wins]};
+function sel(id){S.sel=id;ui(1)}
+function ui(f){if(!S)return;const al=S.cs.filter(c=>c.alive);$('yr').textContent='Année '+yearOf();$('wp').textContent='Pop. '+fmt(al.reduce((s,c)=>s+c.pop,0));$('wg').textContent='PIB '+fmt(al.reduce((s,c)=>s+c.gdp,0));$('ww').textContent='Guerres : '+S.wars.length;$('nc').textContent='Pays : '+al.length;
+ let h='';const lg=l=>`<div class="lg">${l.slice(0,40).map(e=>`<div><span class="m">${dstr(e.d)}</span> ${e.t}</div>`).join('')}</div>`;
+ if(tab==='pays'){const c=S.cs[S.sel];if(!c||!c.alive)h='<p class="m">Cliquez sur un pays.</p>';else{const row=(a,b)=>`<div class="r"><span class="m">${a}</span><span>${b}</span></div>`,nb=Object.keys(c.adj).map(k=>S.cs[k]).filter(x=>x.alive).sort((a,b)=>gr(c,a)-gr(c,b));
+  h=`<img src="${flag(c)}" style="float:right;border-radius:4px"><h2 style="margin:0">${c.name}</h2><div class="m">${c.gov} · ${c.pers}<br>Dirigeant : ${c.leader}</div>`+row('Population',fmt(c.pop))+row('PIB',fmt(c.gdp))+row('Armée',fmt(c.army)+' (puiss. '+fmt(pw(c))+')')+row('Technologie',c.tech.toFixed(1)+(c.tech>6?' ✦':''))+row('Agri/Indus/Mil',c.tb.map(b=>(c.tech*(.7+.6*b)).toFixed(1)).join(' / '))+row('Stabilité',c.stab.toFixed(0))+row('Moral',c.mor.toFixed(0))+row('Nourriture',(c.food*100).toFixed(0)+'%')+row('Trésor',fmt(c.tre))+row('Territoire',c.cells)+
+   '<h3>Ressources</h3>'+row(RES.join(' '),c.res.join(' '))+'<h3>Relations voisines</h3>'+nb.slice(0,6).map(x=>row(`<a href="#" data-s="${x.id}" style="color:${x.col}">${x.name}</a>`,gr(c,x).toFixed(0)+(c.al.has(x.id)?' 🤝':'')+(c.at.has(x.id)?' ⚔':''))).join('')+
+   '<h3>Alliances</h3>'+([...c.al].map(k=>S.cs[k].name).join(', ')||'—')+'<h3>Guerres</h3>'+([...c.at].map(k=>S.cs[k].name).join(', ')||'—')+'<h3>Histoire</h3>'+lg(S.log.filter(e=>e.ids.includes(c.id)))}}
+ else if(tab==='rank'){const k=S.rk||'pow';h=`<select id="rks">${Object.entries(rk).map(([i,v])=>`<option value="${i}" ${i===k?'selected':''}>${v[0]}</option>`).join('')}</select>`+al.slice().sort((a,b)=>rk[k][1](b)-rk[k][1](a)).slice(0,12).map((c,i)=>`<div class="r"><span>${i+1}. <a href="#" data-s="${c.id}" style="color:${c.col}">${c.name}</a></span><span>${fmt(rk[k][1](c))}</span></div>`).join('')}
+ else h='<h3>Chronologie mondiale</h3>'+lg(S.log);
+ $('pn').innerHTML=h;if($('rks'))$('rks').onchange=e=>{S.rk=e.target.value;ui()};$('pn').querySelectorAll('[data-s]').forEach(a=>a.onclick=e=>{e.preventDefault();tab='pays';sel(+a.dataset.s)});
+ const k=$('ch'),g=k.getContext('2d');g.clearRect(0,0,300,90);const top=al.sort((a,b)=>b.gp-a.gp).slice(0,5),mxv=Math.max(1,...top.flatMap(c=>c.hp));top.forEach(c=>{g.strokeStyle=c.col;g.beginPath();c.hp.forEach((v,i)=>{const x=300-(c.hp.length-i)*(300/240),y=88-v/mxv*84;i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke()});g.fillStyle='#9aa7b5';g.fillText('Puissance (top 5)',4,10)}
+// ---- boucle
+function loop(t){const dt=Math.min(.1,(t-last)/1000);last=t;if(S&&speed>0){acc+=dt*speed*2;const t0=performance.now();let n=0;while(acc>=1&&n<400&&performance.now()-t0<14){S.day++;if(S.day%4===0)S.wars.slice().forEach(fight);if(S.day%30===0)monthly();acc--;n++}if(acc>Math.max(50,speed*.6))acc=0}
+ if(S&&dirty&&t-(loop.r||0)>120){draw();loop.r=t}if(S&&t-(loop.u||0)>400){ui();loop.u=t}requestAnimationFrame(loop)}
+$('spd').innerHTML=[0,.5,1,2,5,10,25,50,100,500,1000].map(v=>`<button data-v="${v}" class="${v===1?'on':''}">${v?v+'x':'⏸'}</button>`).join('');
+$('spd').onclick=e=>{if(e.target.dataset.v===undefined)return;speed=+e.target.dataset.v;[...$('spd').children].forEach(b=>b.classList.toggle('on',b===e.target))};
+const MODES={pol:'Politique',mil:'Militaire',eco:'Économie',pop:'Population',res:'Ressources',dip:'Diplomatie',blo:'Alliances'};
+$('modes').innerHTML=Object.entries(MODES).map(([k,v])=>`<button data-m="${k}" class="${k==='pol'?'on':''}">${v}</button>`).join('');
+$('modes').onclick=e=>{if(!e.target.dataset.m)return;mode=e.target.dataset.m;[...$('modes').children].forEach(b=>b.classList.toggle('on',b===e.target));dirty=1};
+$('tabs').innerHTML=[['pays','Pays'],['rank','Classements'],['hist','Histoire']].map(([k,v])=>`<button data-t="${k}" class="${k==='pays'?'on':''}">${v}</button>`).join('');
+$('tabs').onclick=e=>{if(!e.target.dataset.t)return;tab=e.target.dataset.t;[...$('tabs').children].forEach(b=>b.classList.toggle('on',b===e.target));ui()};
+const cellAt=e=>{const r=cv.getBoundingClientRect();return Math.floor((e.clientY-r.top)/r.height*S.H)*S.W+Math.floor((e.clientX-r.left)/r.width*S.W)};
+cv.onclick=e=>{if(!S)return;const o=S.own[cellAt(e)];if(o>=0){tab='pays';[...$('tabs').children].forEach((b,i)=>b.classList.toggle('on',i===0));sel(o);dirty=1}};
+cv.onmousemove=e=>{if(!S)return;const o=S.own[cellAt(e)],t=$('tip');if(o<0||o===undefined){t.style.display='none';return}const c=S.cs[o];t.style.display='block';t.style.left=e.clientX+12+'px';t.style.top=e.clientY+12+'px';t.textContent=`${c.name} · pop ${fmt(c.pop)} · stab ${c.stab.toFixed(0)}`};cv.onmouseleave=()=>$('tip').style.display='none';
+$('pre').onchange=()=>{const p=PRE[$('pre').value];['n','chaos','war','ev','tech'].forEach((k,i)=>$(k).value=p[i])};
+$('go').onclick=gen;gen();requestAnimationFrame(loop);
+</script></body></html>
